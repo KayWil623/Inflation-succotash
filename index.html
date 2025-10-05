@@ -1,0 +1,305 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Enhanced Economic Indicators Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background-color: #f4f4f4;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    body.dark-mode {
+      background-color: #121212;
+      color: #f4f4f4;
+    }
+    header {
+      background-color: #007acc;
+      color: white;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sidebar {
+      width: 200px;
+      background-color: #eee;
+      padding: 20px;
+      position: fixed;
+      top: 60px;
+      bottom: 0;
+      overflow-y: auto;
+    }
+    .sidebar.dark-mode {
+      background-color: #1e1e1e;
+    }
+    .main {
+      margin-left: 220px;
+      padding: 20px;
+    }
+    .dashboard {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 30px;
+    }
+    .card {
+      border: 1px solid #ccc;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      width: 45%;
+    }
+    .card.dark-mode {
+      background: #2c2c2c;
+    }
+    canvas {
+      max-width: 100%;
+    }
+    .filters {
+      margin-bottom: 20px;
+    }
+    label {
+      margin-right: 10px;
+    }
+    button {
+      margin: 5px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Economic Indicators Dashboard</h1>
+    <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
+  </header>
+
+  <div class="sidebar" id="sidebar">
+    <h3>Navigation</h3>
+    <ul>
+      <li><a href="#cpiChart">CPI Chart</a></li>
+      <li><a href="#pceChart">PCE Chart</a></li>
+      <li><a href="#ppiChart">PPI Chart</a></li>
+      <li><a href="#comparisonChart">Comparison</a></li>
+    </ul>
+    <h3>Chart Type</h3>
+    <select id="chartType" onchange="updateCharts()">
+      <option value="line">Line</option>
+      <option value="bar">Bar</option>
+      <option value="radar">Radar</option>
+    </select>
+    <h3>Export</h3>
+    <button onclick="exportCSV()">Export CSV</button>
+    <button onclick="window.print()">Print View</button>
+  </div>
+
+  <div class="main">
+    <div class="filters">
+      <label for="startDate">Start Date:</label>
+      <input type="month" id="startDate" value="2022-10">
+      <label for="endDate">End Date:</label>
+      <input type="month" id="endDate" value="2023-10">
+      <button onclick="updateCharts()">Update Charts</button>
+    </div>
+
+    <div class="dashboard">
+      <div class="card" id="cpiCard">
+        <h2>Consumer Price Index (CPI)</h2>
+        <canvas id="cpiChart"></canvas>
+        <button onclick="downloadChart('cpiChart')">Download Chart</button>
+      </div>
+      <div class="card" id="pceCard">
+        <h2>Personal Consumption Expenditures (PCE)</h2>
+        <canvas id="pceChart"></canvas>
+        <button onclick="downloadChart('pceChart')">Download Chart</button>
+      </div>
+      <div class="card" id="ppiCard">
+        <h2>Producer Price Index (PPI)</h2>
+        <canvas id="ppiChart"></canvas>
+        <button onclick="downloadChart('ppiChart')">Download Chart</button>
+      </div>
+      <div class="card" id="comparisonCard" style="width: 100%;">
+        <h2>Comparison Chart</h2>
+        <canvas id="comparisonChart"></canvas>
+        <button onclick="downloadChart('comparisonChart')">Download Chart</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FRED_API_KEY = 'YOUR_FRED_API_KEY';
+    let cpiChart, pceChart, ppiChart, comparisonChart;
+    let cpiData = [], pceData = [], ppiData = [], labels = [];
+
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+      document.getElementById('sidebar').classList.toggle('dark-mode');
+      document.querySelectorAll('.card').forEach(card => card.classList.toggle('dark-mode'));
+    }
+
+    function formatDate(dateStr) {
+      const [year, month] = dateStr.split('-');
+      return `${new Date(year, month - 1).toLocaleString('default', { month: 'short' })} ${year}`;
+    }
+
+    function filterByDate(data, start, end, key = 'date') {
+      return data.filter(item => {
+        const date = item[key] || `${item.year}-${item.period.substring(1)}`;
+        return date >= start && date <= end;
+      });
+    }
+
+    function createChart(ctx, label, labels, data, type) {
+      return new Chart(ctx, {
+        type: type,
+        data: {
+          labels: labels,
+          datasets: [{
+            label: label,
+            data: data,
+            borderColor: 'rgba(75, 192, 192, 1)',
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            fill: true,
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            zoom: {
+              pan: { enabled: true, mode: 'x' },
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+            },
+            tooltip: { enabled: true }
+          },
+          scales: {
+            x: { title: { display: true, text: 'Date' } },
+            y: { title: { display: true, text: 'Index Value' } }
+          }
+        }
+      });
+    }
+
+    function downloadChart(id) {
+      const canvas = document.getElementById(id);
+      const link = document.createElement('a');
+      link.download = id + '.png';
+      link.href = canvas.toDataURL();
+      link.click();
+    }
+
+    function exportCSV() {
+      let csv = 'Date,CPI,PCE,PPI\n';
+      for (let i = 0; i < labels.length; i++) {
+        csv += `${labels[i]},${cpiData[i] || ''},${pceData[i] || ''},${ppiData[i] || ''}\n`;
+      }
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'economic_indicators.csv';
+      link.click();
+    }
+
+    function updateCharts() {
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+      const chartType = document.getElementById('chartType').value;
+
+      // Fetch CPI
+      fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/CUUR0000SA0')
+        .then(res => res.json())
+        .then(data => {
+          const raw = data.Results.series[0].data;
+          const filtered = filterByDate(raw, startDate, endDate, 'year-month');
+          const cpiLabels = filtered.map(item => `${item.periodName} ${item.year}`);
+          const cpiValues = filtered.map(item => parseFloat(item.value));
+          if (cpiChart) cpiChart.destroy();
+          cpiChart = createChart(document.getElementById('cpiChart').getContext('2d'), 'CPI', cpiLabels, cpiValues, chartType);
+          cpiData = cpiValues;
+          labels = cpiLabels;
+          updateComparisonChart(chartType);
+        }).catch(() => alert('Failed to load CPI data'));
+
+      // Fetch PCE
+      fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=PCEPI&api_key=${FRED_API_KEY}&file_type=json`)
+        .then(res => res.json())
+        .then(data => {
+          const filtered = filterByDate(data.observations, startDate, endDate);
+          const pceLabels = filtered.map(item => item.date);
+          const pceValues = filtered.map(item => parseFloat(item.value));
+          if (pceChart) pceChart.destroy();
+          pceChart = createChart(document.getElementById('pceChart').getContext('2d'), 'PCE Price Index', pceLabels, pceValues, chartType);
+          pceData = pceValues;
+          updateComparisonChart(chartType);
+        }).catch(() => alert('Failed to load PCE data'));
+
+      // Fetch PPI
+      fetch('https://api.bls.gov/publicAPI/v2/timeseries/data/WPUFD4')
+        .then(res => res.json())
+        .then(data => {
+          const raw = data.Results.series[0].data;
+          const filtered = filterByDate(raw, startDate, endDate, 'year-month');
+          const ppiLabels = filtered.map(item => `${item.periodName} ${item.year}`);
+          const ppiValues = filtered.map(item => parseFloat(item.value));
+          if (ppiChart) ppiChart.destroy();
+          ppiChart = createChart(document.getElementById('ppiChart').getContext('2d'), 'PPI', ppiLabels, ppiValues, chartType);
+          ppiData = ppiValues;
+          updateComparisonChart(chartType);
+        }).catch(() => alert('Failed to load PPI data'));
+    }
+
+    function updateComparisonChart(type) {
+      if (cpiData.length && pceData.length && ppiData.length) {
+        if (comparisonChart) comparisonChart.destroy();
+        comparisonChart = new Chart(document.getElementById('comparisonChart').getContext('2d'), {
+          type: type,
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'CPI',
+                data: cpiData,
+                borderColor: 'rgba(255, 99, 132, 1)',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                fill: false
+              },
+              {
+                label: 'PCE',
+                data: pceData,
+                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                fill: false
+              },
+              {
+                label: 'PPI',
+                data: ppiData,
+                borderColor: 'rgba(255, 206, 86, 1)',
+                backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                fill: false
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              zoom: {
+                pan: { enabled: true, mode: 'x' },
+                zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+              },
+              tooltip: { enabled: true }
+            },
+            scales: {
+              x: { title: { display: true, text: 'Date' } },
+              y: { title: { display: true, text: 'Index Value' } }
+            }
+          }
+        });
+      }
+    }
+
+    updateCharts();
+  </script>
+</body>
+</html>
