@@ -26,9 +26,15 @@ Users can filter data by date range, compare indices, switch chart types, and ex
 - ⚠️ Error handling for API requests
 
 ---
+---
 
-## ⚙️ Setup Instructions
+## 🤝 Contributing
 
-1. **Download the project ZIP** and extract it.
-2. Open `index.html` in a browser to test locally.
-3. Replace the placeholder FRED API key in the HTML:
+We welcome contributions to improve the Economic Indicators Dashboard!
+
+### How to Contribute
+
+1. **Fork the repository** to your GitHub account.
+2. **Clone your fork** locally:
+   ```bash
+   git clone https://github.com/your-username/economic-dashboard.git
